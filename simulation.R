@@ -44,39 +44,39 @@ sample_design_list <- c('Sparse', 'Intensive')
 
 #-------------------------------------------------------------
 # run simulation for each situation
-# start_time <- Sys.time()
-# for(sample_size in sample_size_list){
-#   for(sample_design in sample_design_list){
-#     for(i in 1:length(cl_age_list)){
-#       run_simulation(sample_size, sample_design, i,
-#                      cl_age_list, "AGE", num_sim,
-#                      home_dir)
-#       run_simulation(sample_size, sample_design, i,
-#                      cl_sex_list, "SEX", num_sim,
-#                      home_dir)
-#     }
-#   }
-# }
-# run_time <- format(Sys.time() - start_time)
-# setwd(home_dir)
-# write.table(run_time, file = "run_time.txt", sep = "", row.names = F, col.names = F)
-#-------------------------------------------------------------
-# pilot simulation 
-sample_size <- 100
-sample_design <- 'Intensive'
-i <- 2
-num_sim <- 1000
 start_time <- Sys.time()
-run_simulation(sample_size, sample_design, i,
-               cl_age_list, "AGE", num_sim,
-               home_dir)
+for(sample_size in sample_size_list){
+  for(sample_design in sample_design_list){
+    for(i in 1:length(cl_age_list)){
+      run_simulation(sample_size, sample_design, i,
+                     cl_age_list, "AGE", num_sim,
+                     home_dir)
+      run_simulation(sample_size, sample_design, i,
+                     cl_sex_list, "SEX", num_sim,
+                     home_dir)
+    }
+  }
+}
 run_time <- format(Sys.time() - start_time)
 setwd(home_dir)
 write.table(run_time, file = "run_time.txt", sep = "", row.names = F, col.names = F)
-
-type_analysis <- c('type_one', 'power')
-for(analysis in type_analysis){
-  run_analysis(sample_size, sample_design, i,
-               cl_age_list, "AGE", num_sim, home_dir,
-               analysis)
-}
+#-------------------------------------------------------------
+# pilot simulation 
+# sample_size <- 100
+# sample_design <- 'Intensive'
+# i <- 2
+# num_sim <- 1000
+# start_time <- Sys.time()
+# run_simulation(sample_size, sample_design, i,
+#                cl_age_list, "AGE", num_sim,
+#                home_dir)
+# run_time <- format(Sys.time() - start_time)
+# setwd(home_dir)
+# write.table(run_time, file = "run_time.txt", sep = "", row.names = F, col.names = F)
+# 
+# type_analysis <- c('type_one', 'power')
+# for(analysis in type_analysis){
+#   run_analysis(sample_size, sample_design, i,
+#                cl_age_list, "AGE", num_sim, home_dir,
+#                analysis)
+# }
