@@ -3,7 +3,6 @@
 ## Description 
 This repository is developed to conduct monte-carlo simulation to compare the emprical power and type I error of Wald, Score and Likelihood Ratio Tests for the covariate testing probelm in population pharmacokinetic (PopPK) model.
 
-- The analysis.R contains the R code to post-process the simulation results produced by NONMEM
 - The functions.R contains all the R function that I created to facilitate the simulation process
 - The simulation.R contains the simulation scenarios and the main simulation function
 - pat_sim_data.csv is real subject covariates downloaded from https://wwwn.cdc.gov/nchs/nhanes/
