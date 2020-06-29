@@ -2,7 +2,7 @@
 # Title: R functions for simulation study
 # Author: Yixuan Zou
 # Create Date: 5/26/2020
-# Last Update: 6/2/2020
+# Last Update: 6/26/2020
 #-------------------------------------------------------------
 
 #-------------------------------------------------------------
@@ -14,18 +14,13 @@ for(p in requiredPackages){
 }
 #-------------------------------------------------------------
 # create the template dataset for the simulation
-create_data_template <- function(sample_design, sample_size){
-  col_names <- c('CID', 'TIME', 'EVID', 'AMT',
-                 'RATE', 'DV', 'AGE', 'SEX')
+create_data_template <- function(sample_design, sample_size, cov_name){
   ID <- c()
   TIME <- c()
   EVID <- c()
   AMT <- c()
   RATE <- c()
   DV <- c()
-  AGE <- c()
-  WT <- c()
-  SEX <- c()
   if (startsWith(sample_design, "Intensive")){
     # keep track of time from t=0, 2, 4, 8, 12, 24
     t <- c(0, 2, 4, 8, 12, 24)
@@ -39,8 +34,6 @@ create_data_template <- function(sample_design, sample_size){
       AMT[(i-1)*n+1] <- 1000
       RATE[seq((i-1)*n+1, i*n)] <- 0
       DV[seq((i-1)*n+1, i*n)] <- 0
-      AGE <- NA
-      SEX <- NA
     }
   } else{
     # keep track of time from 3 sampling points t
@@ -55,26 +48,23 @@ create_data_template <- function(sample_design, sample_size){
       AMT[(i-1)*n+1] <- 1000
       RATE[seq((i-1)*n+1, i*n)] <- 0
       DV[seq((i-1)*n+1, i*n)] <- 0
-      AGE <- NA
-      SEX <- NA
     }
   }
-  data <- data.frame(ID, TIME, EVID, AMT, RATE, DV, AGE, SEX)
+  data <- data.frame(ID, TIME, EVID, AMT, RATE, DV)
   pat_data <- read.csv('pat_sim_data.csv')
-  for (i in 1:sample_size) {
-    id_index <- which(data$ID == i)
-    for(j in id_index){
-      data[j, c('AGE', 'SEX')] <- pat_data[i, c('AGE', 'SEX')]
-    }
-  }
-  colnames(data) <- col_names
-  write.table(data, 'FULL_SIM_DATA.CSV', sep = ',', row.names = FALSE, col.names = FALSE)
+  pat_sub_data <- sample_n(pat_data, sample_size)
+  pat_sub_data$ID <- 1:sample_size
+  cov_median <- median(pat_sub_data[, colnames(pat_sub_data) == cov_name])
+  final_data <- merge(x = data, y = pat_sub_data, by = "ID", all.x = TRUE)
+  write.table(final_data, 'FULL_SIM_DATA.CSV', sep = ',', row.names = FALSE, col.names = FALSE)
+  write.table(cov_median, 'COV_MEDIAN.txt', sep = '', row.names = FALSE, col.names = FALSE)
 }
 
 # create the NONMEM script of the base model
 create_baseNM <- function(script){
+    cov_names <- paste(colnames(read.csv('pat_sim_data.csv'))[-1], collapse = " ")
     base_model_ctl <- c("$PROBLEM 1-COMPARTMENT MODEL",
-                        "$INPUT ID TIME EVID AMT RATE DV AGE SEX",
+                        gsub("&", cov_names, "$INPUT ID TIME EVID AMT RATE DV &"),
                         "$DATA DATA_SIM.CSV IGNORE=@",
                         "$SUBROUTINES ADVAN1 TRANS2",
                         "$PK",
@@ -99,87 +89,59 @@ create_baseNM <- function(script){
                         "0 FIXED",
                         "$ESTIMATION METHOD=1 INTERACTION MAXEVAL=9999 PRINT=5 NOABORT",
                         "$COV UNCONDITIONAL MATRIX=R",
-                        "$TABLE ID TIME EVID AMT RATE DV AGE SEX IPRED PRED CWRES",
+                        gsub("&", cov_names, "$TABLE ID TIME EVID AMT RATE DV & IPRED PRED CWRES"),
                         "FILE=RESULT.CSV NOAPPEND NOPRINT")
-  writeLines(paste(base_model_ctl, collapse = "\n"),
-             script, sep="")
+  writeLines(paste(base_model_ctl, collapse = "\n"), script, sep="")
 }
 
 # create the simulation NONMEM script with the covariate
-create_simCovNM <- function(coef, cov_name, sim_index){
-  data_sim_ctl <- c("$PROBLEM SIMULATION DATA",
-                    "$INPUT ID TIME EVID AMT RATE DV AGE SEX",
-                    "$DATA FULL_SIM_DATA.CSV IGNORE=@",
-                    "$SUBROUTINES  ADVAN1 TRANS2",
-                    "$PK",
-                    "CLP=THETA(1)",
-                    "VP=THETA(2)",
-                    "CLSEX=EXP(SEX*THETA(3))",
-                    "CL=CLP*CLSEX*EXP(ETA(1))",
-                    "V=VP*EXP(ETA(2))",
-                    "S1=V",
-                    "$ERROR",
-                    "IPRED=F",
-                    "Y=F*(1+ERR(1))+ERR(2)",
-                    "$THETA",
-                    "(0.1, FIXED)",
-                    "(1, FIXED)",
-                    gsub("&", coef, "(&, FIXED)"),
-                    "$OMEGA",
-                    "0.1 FIXED",
-                    "0.1 FIXED",
-                    "$SIGMA",
-                    "0.1 FIXED",
-                    "0 FIXED",
-                    gsub("&", sim_index, "$SIMULATION (123456&) ONLYSIMULATION SUBPROBLEM=1"),
-                    "$TABLE ID TIME EVID AMT RATE DV AGE SEX FILE=DATA_SIM.TAB NOAPPEND NOPRINT ONEHEADER")
-  if(cov_name == "AGE"){
-    data_sim_ctl[startsWith(data_sim_ctl, "CLSEX")] = "CLAGE=(AGE/52)**THETA(3)"
-    data_sim_ctl[startsWith(data_sim_ctl, "CL=")] = "CL=CLP*CLAGE*EXP(ETA(1))"
+create_simCovNM <- function(coef, cov_name, cov_median, sim_index, omegasq, sigmasq){
+  cov_names <- paste(colnames(read.csv('pat_sim_data.csv'))[-1], collapse = " ")
+  data_sim_ctl <- c(
+    "$PROBLEM SIMULATION DATA",
+    gsub("&", cov_names, "$INPUT ID TIME EVID AMT RATE DV &"),
+    "$DATA FULL_SIM_DATA.CSV IGNORE=@",
+    "$SUBROUTINES  ADVAN1 TRANS2",
+    "$PK",
+    "CLP=THETA(1)",
+    "VP=THETA(2)",
+    "CLSEX=EXP(SEX*THETA(3))",
+    "CL=CLP*CLSEX*EXP(ETA(1))",
+    "V=VP*EXP(ETA(2))",
+    "S1=V",
+    "$ERROR",
+    "IPRED=F",
+    "Y=F*(1+ERR(1))+ERR(2)",
+    "$THETA",
+    "(0.1, FIXED)",
+    "(1, FIXED)",
+    gsub("&", coef, "(&, FIXED)"),
+    "$OMEGA",
+    gsub("&", omegasq, "& FIXED"),
+    gsub("&", omegasq, "& FIXED"),
+    "$SIGMA",
+    gsub("&", sigmasq, "& FIXED"),
+    "0 FIXED",
+    gsub("&", sim_index, "$SIMULATION (123456&) ONLYSIMULATION SUBPROBLEM=1"),
+    gsub("&", cov_names, "$TABLE ID TIME EVID AMT RATE DV & FILE=DATA_SIM.TAB NOAPPEND NOPRINT ONEHEADER"))
+  if(cov_name != "SEX"){
+    line1 <- gsub("&2", cov_median, gsub("&1", cov_name, "CL&1=(&1/&2)**THETA(3)"))
+    line2 <- gsub("&1", cov_name, "CL=CLP*CL&1*EXP(ETA(1))")
+    data_sim_ctl[startsWith(data_sim_ctl, "CLSEX")] = line1
+    data_sim_ctl[startsWith(data_sim_ctl, "CL=")] = line2
   }
-  writeLines(paste(data_sim_ctl, collapse = "\n"),
-             "data_sim.ctl", sep="")
-}
-
-# create the simulation NONMEM script
-create_simNM <- function(sim_index){
-  data_sim_ctl <- c("$PROBLEM SIMULATION DATA",
-                    "$INPUT ID TIME EVID AMT RATE DV AGE SEX",
-                    "$DATA FULL_SIM_DATA.CSV IGNORE=@",
-                    "$SUBROUTINES  ADVAN1 TRANS2",
-                    "$PK",
-                    "CLP=THETA(1)",
-                    "VP=THETA(2)",
-                    "CL=CLP*EXP(ETA(1))",
-                    "V=VP*EXP(ETA(2))",
-                    "S1=V",
-                    "$ERROR",
-                    "IPRED=F",
-                    "Y=F*(1+ERR(1))+ERR(2)",
-                    "$THETA",
-                    "(0.1, FIXED)",
-                    "(1, FIXED)",
-                    "$OMEGA",
-                    "0.1 FIXED",
-                    "0.1 FIXED",
-                    "$SIGMA",
-                    "0.1 FIXED",
-                    "0 FIXED",
-                    gsub("&", sim_index, "$SIMULATION (123456&) ONLYSIMULATION SUBPROBLEM=1"),
-                    "$TABLE ID TIME EVID AMT RATE DV AGE SEX FILE=DATA_SIM.TAB NOAPPEND NOPRINT ONEHEADER")
-  writeLines(paste(data_sim_ctl, collapse = "\n"),
-             "data_sim.ctl", sep="")
-
+  writeLines(paste(data_sim_ctl, collapse = "\n"), "data_sim.ctl", sep="")
 }
 
 # create the score test NONMEM script
-create_scoreNM <- function(cov_name, base_result_file, script){
+create_scoreNM <- function(cov_name, cov_median, base_result_file, script){
   base_result <- read.table(base_result_file,header = T, sep = "",
                             as.is= T,skip= 1)
   estimates <- base_result[base_result$ITERATION == -1000000000, ][-c(1, ncol(base_result))]
+  cov_names <- paste(colnames(read.csv('pat_sim_data.csv'))[-1], collapse = " ")
   score_model_ctl <- c(
     "$PROBLEM SIMULATION DATA",
-    "$INPUT ID TIME EVID AMT RATE DV AGE SEX",
+    gsub("&", cov_names, "$INPUT ID TIME EVID AMT RATE DV &"),
     "$DATA DATA_SIM.CSV IGNORE=@",
     "$SUBROUTINES  ADVAN1 TRANS2",
     "$PK",
@@ -203,55 +165,58 @@ create_scoreNM <- function(cov_name, base_result_file, script){
     "0 FIXED",
     "$ESTIMATION METHOD=1 INTERACTION MAXEVAL=1 PRINT=5 NOABORT SIGL=10",
     "$COV UNCONDITIONAL MATRIX=R",
-    "$TABLE ID TIME EVID AMT RATE DV AGE SEX FILE=COV_MODEL.TAB NOAPPEND NOPRINT ONEHEADER")
-  if(cov_name == "AGE"){
-    score_model_ctl[startsWith(score_model_ctl, "CLSEX")] = "CLAGE=(AGE/52)**(THETA(3)-1.0)"
-    score_model_ctl[startsWith(score_model_ctl, "CL=")] = "CL=CLP*CLAGE*EXP(ETA(1))"
+    gsub("&", cov_names, "$TABLE ID TIME EVID AMT RATE DV AGE SEX FILE=COV_MODEL.TAB NOAPPEND NOPRINT ONEHEADER"))
+  if(cov_name != "SEX"){
+    line1 <- gsub("&2", cov_median, gsub("&1", cov_name, "CL&1=(&1/&2)**(THETA(3)-1.0)"))
+    line2 <- gsub("&1", cov_name, "CL=CLP*CL&1*EXP(ETA(1))")
+    score_model_ctl[startsWith(score_model_ctl, "CLSEX")] = line1
+    score_model_ctl[startsWith(score_model_ctl, "CL=")] = line2
   }
   for(para_name in colnames(estimates)){
     if(estimates[para_name] > 0){
       score_model_ctl <- gsub(para_name, estimates[para_name], score_model_ctl)
     }
   }
-  writeLines(paste(score_model_ctl, collapse = "\n"),
-             script, sep="")  
+  writeLines(paste(score_model_ctl, collapse = "\n"), script, sep="")  
 }
 
 # create the covariate model NONMEM script for LRT and Wald's test
-create_covNM <- function(cov_name, script){
+create_covNM <- function(cov_name, cov_median, script){
+  cov_names <- paste(colnames(read.csv('pat_sim_data.csv'))[-1], collapse = " ")
   cov_model_ctl <- c(
     "$PROBLEM SIMULATION DATA",
-      "$INPUT ID TIME EVID AMT RATE DV AGE SEX",
-      "$DATA DATA_SIM.CSV IGNORE=@",
-      "$SUBROUTINES  ADVAN1 TRANS2",
-      "$PK",
-      "CLP=THETA(1)",
-      "VP=THETA(2)",
-      "CLSEX=EXP(SEX*THETA(3))",
-      "CL=CLP*CLSEX*EXP(ETA(1))",
-      "V=VP*EXP(ETA(2))",
-      "S1=V",
-      "$ERROR",
-      "Y=F*(1+ERR(1))+ERR(2)",
-      "$THETA",
-      "(0, 0.1)",
-      "(0, 1)",
-      "(0, 1)",
-      "$OMEGA",
-      "0.1",
-      "0.1",
-      "$SIGMA",
-      "0.1",
-      "0 FIXED",
-      "$ESTIMATION METHOD=1 INTERACTION MAXEVAL=9999 PRINT=5 NOABORT",
-      "$COV UNCONDITIONAL MATRIX=R",
-      "$TABLE ID TIME EVID AMT RATE DV AGE SEX FILE=COV_MODEL.TAB NOAPPEND NOPRINT ONEHEADER")
-  if(cov_name == "AGE"){
-    cov_model_ctl[startsWith(cov_model_ctl, "CLSEX")] = "CLAGE=(AGE/52)**THETA(3)"
-    cov_model_ctl[startsWith(cov_model_ctl, "CL=")] = "CL=CLP*CLAGE*EXP(ETA(1))"
+    gsub("&", cov_names, "$INPUT ID TIME EVID AMT RATE DV &"),
+    "$DATA DATA_SIM.CSV IGNORE=@",
+    "$SUBROUTINES  ADVAN1 TRANS2",
+    "$PK",
+    "CLP=THETA(1)",
+    "VP=THETA(2)",
+    "CLSEX=EXP(SEX*THETA(3))",
+    "CL=CLP*CLSEX*EXP(ETA(1))",
+    "V=VP*EXP(ETA(2))",
+    "S1=V",
+    "$ERROR",
+    "Y=F*(1+ERR(1))+ERR(2)",
+    "$THETA",
+    "(0, 0.1)",
+    "(0, 1)",
+    "(0, 1)",
+    "$OMEGA",
+    "0.1",
+    "0.1",
+    "$SIGMA",
+    "0.1",
+    "0 FIXED",
+    "$ESTIMATION METHOD=1 INTERACTION MAXEVAL=9999 PRINT=5 NOABORT",
+    "$COV UNCONDITIONAL MATRIX=R",
+    gsub("&", cov_names, "$TABLE ID TIME EVID AMT RATE DV AGE SEX FILE=COV_MODEL.TAB NOAPPEND NOPRINT ONEHEADER"))
+  if(cov_name != "SEX"){
+    line1 <- gsub("&2", cov_median, gsub("&1", cov_name, "CL&1=(&1/&2)**THETA(3)"))
+    line2 <- gsub("&1", cov_name, "CL=CLP*CL&1*EXP(ETA(1))")
+    cov_model_ctl[startsWith(cov_model_ctl, "CLSEX")] = line1
+    cov_model_ctl[startsWith(cov_model_ctl, "CL=")] = line2
   }
-  writeLines(paste(cov_model_ctl, collapse = "\n"),
-             script, sep="")
+  writeLines(paste(cov_model_ctl, collapse = "\n"), script, sep="")
 }
 
 # read the object function value(OFV) 
@@ -270,11 +235,12 @@ run_NM <- function(NM_script){
 
 # summarize the output from NONMEM
 run_analysis <- function(sample_size, sample_design, coef_index,
-                         cl_cov_list, cov_name, num_sim, home_dir,
-                         analysis){
+                         cl_cov_list, cov_name, num_sim, omegasq, 
+                         sigmasq, home_dir){
   dir_name_0 <- paste("Sim", sample_size, sample_design,
-                      cov_name, coef_index, sep = "_")
-  proj_dir_0 <- paste(home_dir, dir_name_0, analysis, sep = "/")
+                      cov_name, "omegasq", omegasq, "sigmasq", 
+                      sigmasq, coef_index, sep = "_")
+  proj_dir_0 <- paste(home_dir, dir_name_0, sep = "/")
   setwd(proj_dir_0)
   base_result_list <- paste0("base_model_", 1:num_sim, ".ext")
   cov_result_list <- paste0("cov_model_", 1:num_sim, ".ext")
@@ -305,7 +271,8 @@ run_analysis <- function(sample_size, sample_design, coef_index,
   }
   final_result <- data.frame(sample_size, sample_design, 
                              coef=cl_cov_list[coef_index],
-                             cov_name, num_sim, analysis,
+                             cov_name, num_sim,
+                             omegasq, sigmasq,
                              lrt=lrt_stat_list,
                              wald=wam_stat_list,
                              score=score_stat_list)
@@ -315,31 +282,21 @@ run_analysis <- function(sample_size, sample_design, coef_index,
     dir.create("Results")
   }
   setwd(paste(home_dir, "Results", sep="/"))
-  write.csv(final_result, paste(dir_name_0, "_", analysis, ".csv", sep=""), row.names = F)  
-  # create a plot directory under the home directory
-  setwd(home_dir)
-  if(!dir.exists("Plots")){
-    dir.create("Plots")
-  }
-  setwd(paste(home_dir, "Plots", sep="/"))
-  df_long <- final_result %>% select(lrt, wald, score) %>%
-    pivot_longer(c(lrt, wald, score), names_to = "Test", values_to = "Statistic")
-  p <- ggplot(df_long, aes(Statistic, color = Test)) + geom_density() + 
-    xlim(0, 25) + 
-    theme_few() + scale_colour_few("Light")
-  ggsave(paste(dir_name_0, "_", analysis, ".jpg", sep=""), p, dpi = 300)
+  write.csv(final_result, paste(dir_name_0, ".csv", sep=""), row.names = F)  
 }
 
 # the main simulation function
 run_simulation <- function(sample_size, sample_design, coef_index,
-                           cl_cov_list, cov_name, num_sim, home_dir){
+                           cl_cov_list, cov_name, num_sim, omegasq, 
+                           sigmasq, home_dir){
   # set the home directory
   setwd(home_dir)
   coef <- cl_cov_list[coef_index]
 
   # create a project directory for each situation
-  dir_name_0 <- paste("Sim", sample_size, sample_design,
-                      cov_name, coef_index, sep = "_")
+  dir_name_0 <-  paste("Sim", sample_size, sample_design,
+                       cov_name, "omegasq", omegasq, "sigmasq", 
+                       sigmasq, coef_index, sep = "_")
   if(!dir.exists(dir_name_0)){
     dir.create(dir_name_0)
   }
@@ -349,7 +306,6 @@ run_simulation <- function(sample_size, sample_design, coef_index,
             overwrite = TRUE, recursive = FALSE,
             copy.mode = TRUE)
   setwd(proj_dir_0)
-  type_analysis <- c('type_one', 'power')
   base_model_list <- paste0("base_model_", 1:num_sim, ".ctl")
   base_result_list <- paste0("base_model_", 1:num_sim, ".ext")
   cov_model_list <- paste0("cov_model_", 1:num_sim, ".ctl")
@@ -357,43 +313,27 @@ run_simulation <- function(sample_size, sample_design, coef_index,
   for(i in 1:num_sim){
     setwd(proj_dir_0)
     # bootstrap the covariate info from NHANES database
-    create_data_template(sample_design, sample_size)
-    # create directory for type 1 and power analysis
-    for(analysis in type_analysis){
-      setwd(proj_dir_0)
-      dir_name_1 <- analysis
-      if(!dir.exists(dir_name_1)){
-        dir.create(dir_name_1)
-      }
-      proj_dir_1 <- paste(proj_dir_0, "/", dir_name_1, sep = "")
-      files <- c("nmfe74.bat", "FULL_SIM_DATA.CSV")
-      file.copy(from=files, to=proj_dir_1,
-                overwrite = TRUE, recursive = FALSE,
-                copy.mode = TRUE)
-      setwd(proj_dir_1)
-      # create NONMEM script for simulation
-      if(analysis == 'type_one'){
-        create_simNM(i)
-      } else{
-        create_simCovNM(coef, cov_name, i)
-      }
-      # run the sim script
-      run_NM("data_sim.ctl")
-      # clean the sim output from NONMEM
-      sim_df <- read.table(file="DATA_SIM.TAB",
-                           header = T, sep = "",
-                           as.is= T,skip= 1)
-      write.table(sim_df, "DATA_SIM.CSV",  sep=",", row.names = F, col.names = F)
-      
-      # create the base model and run it
-      create_baseNM(base_model_list[i])
-      run_NM(base_model_list[i])
-      # create score test script and run it
-      create_scoreNM(cov_name, base_result_list[i], score_model_list[i])
-      run_NM(score_model_list[i])
-      # create  LRT and Wald's test script and run it
-      create_covNM(cov_name, cov_model_list[i])
-      run_NM(cov_model_list[i])
-    }
+    create_data_template(sample_design, sample_size, cov_name)
+    # read the median of the covariate
+    cov_median <- read.table("COV_MEDIAN.txt")$V1
+    # create NONMEM script for simulation
+    create_simCovNM(coef, cov_name, cov_median, i, omegasq, sigmasq)
+    # run the sim script
+    run_NM("data_sim.ctl")
+    # clean the sim output from NONMEM
+    sim_df <- read.table(file="DATA_SIM.TAB",
+                         header = T, sep = "",
+                         as.is= T,skip= 1)
+    write.table(sim_df, "DATA_SIM.CSV",  sep=",", row.names = F, col.names = F)
+    
+    # create the base model and run it
+    create_baseNM(base_model_list[i])
+    run_NM(base_model_list[i])
+    # create score test script and run it
+    create_scoreNM(cov_name, cov_median, base_result_list[i], score_model_list[i])
+    run_NM(score_model_list[i])
+    # create  LRT and Wald's test script and run it
+    create_covNM(cov_name, cov_median, cov_model_list[i])
+    run_NM(cov_model_list[i])
   }
 }
