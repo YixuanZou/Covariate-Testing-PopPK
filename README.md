@@ -14,6 +14,6 @@ In order to run the simulation, you need to follow the steps:
 
 1. Download the codes
 2. Put nmfe74.bat or nmfe74 (linux) into the folder
-3. Go to simulation.R to change the home directory and the simulation scenarios
-4. Run simulation.R
+3. Go to simulation.r to change the home directory and the simulation scenarios
+4. Run simulation.r
  
