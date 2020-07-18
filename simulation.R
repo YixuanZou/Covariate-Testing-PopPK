@@ -23,7 +23,8 @@ num_sim <- 5
 
 # home directory
 # first path is for linux; second path is for windows 
-home_dir <- ifelse(is_linux, "/opt/data/someThing", "D:/Pharmacy/Projects/Cov_test")
+home_dir <- ifelse(is_linux, "/home/yixuan/Downloads/Covariate-Testing-PopPK-master", 
+                   "D:/Pharmacy/Projects/Cov_test")
 setwd(home_dir)
 source("functions.r")
 
@@ -48,7 +49,7 @@ cov_corr_list <- list(c("WT","BSA"),
                       c("WT", "HT"),
                       c("WT", "ALP"))
 # pilot simulation 
-# num_sim <- 10
+# num_sim <- 2
 # sample_size_list <- 50
 # cl_cont_list <- 1
 # cl_cat_list <- 1

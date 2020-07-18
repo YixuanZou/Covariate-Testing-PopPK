@@ -230,9 +230,9 @@ read_obj <- function(result_file){
 # run NONMEM script
 run_NM <- function(NM_script, is_linux){
   NM_result <- gsub("ctl", "out", NM_script)
-  cmd_line <- ifelse(is_linux, paste("nmfe74", NM_script, NM_result), 
+  cmd_line <- ifelse(is_linux, paste("./nmfe74", NM_script, NM_result), 
                      paste("nmfe74.bat", NM_script, NM_result))
-  shell(cmd_line)
+  system(cmd_line)
 }
 
 # summarize the output from NONMEM
@@ -391,8 +391,11 @@ run_simulation <- function(sample_size, sample_design, coef_index,
     dir.create(dir_name_0)
   }
   proj_dir_0 <- paste(home_dir, "/", dir_name_0, sep = "")
-  files <- ifelse(is_linux, c("nmfe74", "PAT_SIM_DATA.CSV"),
-                  c("nmfe74.bat", "PAT_SIM_DATA.CSV"))
+  files <- c("nmfe74.bat", "PAT_SIM_DATA.CSV")
+  if(is_linux){
+    files <- c("./nmfe74", "PAT_SIM_DATA.CSV")
+  }
+  
   file.copy(from=files, to=proj_dir_0,
             overwrite = TRUE, recursive = FALSE,
             copy.mode = TRUE)
@@ -464,6 +467,9 @@ run_simulation_corr <- function(sample_size, sample_design, coef_index,
   }
   proj_dir_0 <- paste(home_dir, "/", dir_name_0, sep = "")
   files <- c("nmfe74.bat", "PAT_SIM_DATA.CSV")
+  if(is_linux){
+    files <- c("./nmfe74", "PAT_SIM_DATA.CSV")
+  }
   file.copy(from=files, to=proj_dir_0,
             overwrite = TRUE, recursive = FALSE,
             copy.mode = TRUE)
