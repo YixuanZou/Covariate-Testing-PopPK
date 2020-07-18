@@ -16,7 +16,7 @@ rm(list=ls(all=TRUE))
 #-------------------------------------------------------------
 #### simulation setting (change here)
 # number of simulation
-num_sim <- 1000
+num_sim <- 10
 
 # home directory
 home_dir <- "D:/Pharmacy/Projects/Cov_test"
@@ -27,9 +27,9 @@ source("functions.r")
 sample_size_list <- c(50, 100, 200)
 # coefficient of effects of continuous variable on clearance
 # when coefficient=0 power is calculated
-cl_cont_list <- c(0, 0.1, 0.25, 0.5, 0.75, 1)
+cl_cont_list <- c(0, 0.25, 0.5, 0.75)
 # coefficient of effects of categorical variable on clearance
-cl_cat_list <- c(0, 0.1, 0.25, 0.5, 0.75, 1)
+cl_cat_list <- c(0, 0.25, 0.5, 0.75)
 # sample desgin
 sample_design_list <- c('Sparse', 'Intensive')
 # omega sqaure
@@ -43,14 +43,15 @@ cl_v_corr_list <- c(0)
 cov_corr_list <- list(c("WT","BSA"),
                       c("WT", "HT"),
                       c("WT", "ALP"))
-num_sim <- 10
-sample_size_list <- 50
-cl_cont_list <- 1
-cl_cat_list <- 1
-sample_design_list <- "Sparse"
-omegasq_list <- 0.1
-sigmasq_list <- 0.1
-cov_corr_list <- list(c("WT","HT"))
+# pilot simulation 
+# num_sim <- 10
+# sample_size_list <- 50
+# cl_cont_list <- 1
+# cl_cat_list <- 1
+# sample_design_list <- "Sparse"
+# omegasq_list <- 0.1
+# sigmasq_list <- 0.1
+# cov_corr_list <- list(c("WT","HT"))
 #-------------------------------------------------------------
 
 #-------------------------------------------------------------
