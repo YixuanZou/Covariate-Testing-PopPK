@@ -3,7 +3,7 @@
 #        for Covariate Testing in PopPK
 # Author: Yixuan Zou
 # Create Date: 5/26/2020
-# Last Update: 7/12/2020
+# Last Update: 7/17/2020
 # CAUTION: You need to put NONMEM batch file into the folder
 #-------------------------------------------------------------
 
@@ -15,11 +15,15 @@ rm(list=ls(all=TRUE))
 
 #-------------------------------------------------------------
 #### simulation setting (change here)
+# is the system linux
+is_linux <- (unname(Sys.info()["sysname"]) == "Linux")
+
 # number of simulation
-num_sim <- 10
+num_sim <- 5
 
 # home directory
-home_dir <- "D:/Pharmacy/Projects/Cov_test"
+# first path is for linux; second path is for windows 
+home_dir <- ifelse(is_linux, "/opt/data/someThing", "D:/Pharmacy/Projects/Cov_test")
 setwd(home_dir)
 source("functions.r")
 
@@ -66,10 +70,10 @@ for(sample_size in sample_size_list){
           for(cl_v_corr in cl_v_corr_list){
             run_simulation(sample_size, sample_design, index,
                            cl_cont_list, "WT", num_sim, cl_v_corr,
-                           omegasq, sigmasq, home_dir)
+                           omegasq, sigmasq, home_dir, is_linux)
             run_simulation(sample_size, sample_design, index,
                            cl_cat_list, "SEX", num_sim, cl_v_corr,
-                           omegasq, sigmasq, home_dir)
+                           omegasq, sigmasq, home_dir, is_linux)
           }
         }
       }
@@ -106,6 +110,7 @@ for(sample_size in sample_size_list){
 #-------------------------------------------------------------
 #### Part 2: correlated covariate
 start_time <- Sys.time()
+cl_cont_list <- cl_cont_list[cl_cont_list>0]
 for(sample_size in sample_size_list){
   for(sample_design in sample_design_list){
     for(index in 1:length(cl_cat_list)){
@@ -115,7 +120,8 @@ for(sample_size in sample_size_list){
             for(cov_corr in cov_corr_list){
               run_simulation_corr(sample_size, sample_design, index,
                                   cl_cont_list, cov_corr, num_sim, 
-                                  cl_v_corr, omegasq, sigmasq, home_dir)
+                                  cl_v_corr, omegasq, sigmasq, home_dir,
+                                  is_linux)
             }
           }
         }

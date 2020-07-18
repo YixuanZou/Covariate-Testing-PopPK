@@ -2,7 +2,7 @@
 # Title: R functions for simulation study
 # Author: Yixuan Zou
 # Create Date: 5/26/2020
-# Last Update: 7/12/2020
+# Last Update: 7/17/2020
 #-------------------------------------------------------------
 
 #-------------------------------------------------------------
@@ -228,9 +228,10 @@ read_obj <- function(result_file){
 }
 
 # run NONMEM script
-run_NM <- function(NM_script){
+run_NM <- function(NM_script, is_linux){
   NM_result <- gsub("ctl", "out", NM_script)
-  cmd_line <- paste("nmfe74.bat", NM_script, NM_result)
+  cmd_line <- ifelse(is_linux, paste("nmfe74", NM_script, NM_result), 
+                     paste("nmfe74.bat", NM_script, NM_result))
   shell(cmd_line)
 }
 
@@ -376,7 +377,7 @@ run_analysis_corr <- function(sample_size, sample_design, coef_index,
 # the main simulation function
 run_simulation <- function(sample_size, sample_design, coef_index,
                            cl_cov_list, cov_name, num_sim, cl_v_corr,
-                           omegasq, sigmasq, home_dir){
+                           omegasq, sigmasq, home_dir, is_linux){
   # set the home directory
   setwd(home_dir)
   coef <- cl_cov_list[coef_index]
@@ -390,7 +391,8 @@ run_simulation <- function(sample_size, sample_design, coef_index,
     dir.create(dir_name_0)
   }
   proj_dir_0 <- paste(home_dir, "/", dir_name_0, sep = "")
-  files <- c("nmfe74.bat", "PAT_SIM_DATA.CSV")
+  files <- ifelse(is_linux, c("nmfe74", "PAT_SIM_DATA.CSV"),
+                  c("nmfe74.bat", "PAT_SIM_DATA.CSV"))
   file.copy(from=files, to=proj_dir_0,
             overwrite = TRUE, recursive = FALSE,
             copy.mode = TRUE)
@@ -411,7 +413,7 @@ run_simulation <- function(sample_size, sample_design, coef_index,
       create_simCovNM(coef, cov_name, cov_median, i, 
                       cl_v_corr, omegasq, sigmasq)
       # run the sim script
-      run_NM("data_sim.ctl")
+      run_NM("data_sim.ctl", is_linux)
       # clean the sim output from NONMEM
       sim_df <- read.table(file="DATA_SIM.TAB",
                            header = T, sep = "",
@@ -422,13 +424,13 @@ run_simulation <- function(sample_size, sample_design, coef_index,
       
       # create the base model and run it
       create_baseNM(base_model_list[i])
-      run_NM(base_model_list[i])
+      run_NM(base_model_list[i], is_linux)
       # create score test script and run it
       create_scoreNM(cov_name, cov_median, base_result_list[i], score_model_list[i])
-      run_NM(score_model_list[i])
+      run_NM(score_model_list[i], is_linux)
       # create  LRT and Wald's test script and run it
       create_covNM(cov_name, cov_median, cov_model_list[i])
-      run_NM(cov_model_list[i])},
+      run_NM(cov_model_list[i], is_linux)},
       error = function(e) "error")
     if (status == "error"){
       i <- i 
@@ -443,7 +445,7 @@ run_simulation <- function(sample_size, sample_design, coef_index,
 # cl_cov_list should not contain 0
 run_simulation_corr <- function(sample_size, sample_design, coef_index,
                                 cl_cov_list, cov_corr, num_sim, cl_v_corr,
-                                omegasq, sigmasq, home_dir){
+                                omegasq, sigmasq, home_dir, is_linux){
   # set the home directory
   setwd(home_dir)
   coef <- cl_cov_list[coef_index]
@@ -485,7 +487,7 @@ run_simulation_corr <- function(sample_size, sample_design, coef_index,
       create_simCovNM(coef, cov_true, cov_true_median, j, 
                       cl_v_corr, omegasq, sigmasq)
       # run the sim script
-      run_NM("data_sim.ctl")
+      run_NM("data_sim.ctl", is_linux)
       # clean the sim output from NONMEM
       sim_df <- read.table(file="DATA_SIM.TAB",
                            header = T, sep = "",
@@ -502,17 +504,17 @@ run_simulation_corr <- function(sample_size, sample_design, coef_index,
                                    unlist())
       # create the base model and run it
       create_baseNM(base_model_list[i])
-      run_NM(base_model_list[i])
+      run_NM(base_model_list[i], is_linux)
       # create score test script and run it
       create_scoreNM(cov_true, cov_true_median, base_result_list[i], score_model_list[i])
-      run_NM(score_model_list[i])
+      run_NM(score_model_list[i], is_linux)
       create_scoreNM(cov_false, cov_false_median, base_result_list[i], score_model_corr_list[i])
-      run_NM(score_model_corr_list[i])
+      run_NM(score_model_corr_list[i], is_linux)
       # create  LRT and Wald's test script and run it
       create_covNM(cov_true, cov_true_median, cov_model_list[i])
-      run_NM(cov_model_list[i])
+      run_NM(cov_model_list[i], is_linux)
       create_covNM(cov_false, cov_false_median, cov_model_corr_list[i])
-      run_NM(cov_model_corr_list[i])},
+      run_NM(cov_model_corr_list[i], is_linux)},
       error = function(e) "error")
     if (indication == "error"){
       i <- i 
